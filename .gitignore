@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+.angular/
+.angular/cache/
+android/.gradle/
+android/app/build/
+android/build/
+ios/App/App/build/
+ios/App/Pods/
+.antigravity/
+.gemini/
+
+
+# Build artifacts
+www/
+dist/
+build/
+android/app/src/main/assets/public/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.log
+.gradle/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# API keys / Sensitive
+google-services.json
+GoogleService-Info.plist
+src/environments/environment.prod.ts
+
+node_modules

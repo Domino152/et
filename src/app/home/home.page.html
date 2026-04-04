@@ -1,0 +1,104 @@
+<ion-header>
+  <ion-toolbar color="primary">
+    <ion-title>Expense Tracker</ion-title>
+    <ion-buttons slot="end">
+      <ion-button *ngIf="!isAuthenticated" (click)="signIn()" [disabled]="isSigningIn">
+        <ion-icon name="logo-google" slot="start"></ion-icon>
+        {{ isSigningIn ? 'Signing in...' : 'SIGN IN' }}
+      </ion-button>
+      <ion-button *ngIf="isAuthenticated" (click)="signOut()">
+        <ion-icon name="log-out-outline" slot="start"></ion-icon>
+        SIGN OUT
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <div class="hero-section">
+    <div class="wallet-icon">
+      <ion-icon name="wallet-outline"></ion-icon>
+    </div>
+    <h1>Track Your Expenses</h1>
+    <p>Capture receipts and upload them to Google Drive instantly</p>
+
+    <div *ngIf="isAuthenticated" class="user-badge">
+      <ion-icon name="checkmark-circle"></ion-icon>
+      {{ userEmail }}
+    </div>
+  </div>
+
+  <div class="action-cards">
+    <div class="action-card expense-card" (click)="navigateTo('expense')">
+      <div class="card-icon">
+        <ion-icon name="receipt-outline"></ion-icon>
+      </div>
+      <span>Expense</span>
+    </div>
+    <div class="action-card purchase-card" (click)="navigateTo('purchase')">
+      <div class="card-icon">
+        <ion-icon name="cart-outline"></ion-icon>
+      </div>
+      <span>Purchase</span>
+    </div>
+  </div>
+
+  <div class="history-section" *ngIf="isAuthenticated">
+    <div class="section-header">
+      <h2 class="section-title">Recent History</h2>
+      <ion-button fill="clear" (click)="loadHistory()" [disabled]="isLoadingHistory">
+        <ion-icon name="sync-outline" [class.rotating]="isLoadingHistory"></ion-icon>
+      </ion-button>
+    </div>
+
+    <div *ngIf="isLoadingHistory && historyItems.length === 0" class="history-list">
+      <div class="history-item skeleton-item" *ngFor="let i of [1,2,3]">
+        <ion-skeleton-text animated style="width: 44px; height: 44px; border-radius: 12px;"></ion-skeleton-text>
+        <div class="item-info">
+          <ion-skeleton-text animated style="width: 60%; height: 16px; margin-bottom: 6px;"></ion-skeleton-text>
+          <ion-skeleton-text animated style="width: 40%; height: 12px;"></ion-skeleton-text>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="!isLoadingHistory && historyItems.length === 0" class="empty-history">
+      <ion-icon name="document-text-outline"></ion-icon>
+      <p>No recent uploads found</p>
+    </div>
+
+    <div class="history-list" *ngIf="historyItems.length > 0">
+      <div class="history-item" *ngFor="let item of historyItems">
+        <div class="item-icon" [ngClass]="item.type.toLowerCase()">
+          <ion-icon [name]="item.type === 'Expense' ? 'receipt-outline' : 'cart-outline'"></ion-icon>
+        </div>
+        <div class="item-info">
+          <p class="item-name">{{ item.name }}</p>
+          <p class="item-date">{{ item.date || 'Unknown date' }}</p>
+        </div>
+        <ion-button fill="clear" (click)="openDriveLink(item.webViewLink)">
+          <ion-icon name="open-outline"></ion-icon>
+        </ion-button>
+      </div>
+    </div>
+  </div>
+
+  <div class="how-it-works">
+    <p class="section-title">How it works</p>
+    <div class="step">
+      <div class="step-num">1</div>
+      <span>Choose Expense or Purchase</span>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <span>Take a photo of your receipt</span>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <span>Add date &amp; description</span>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <span>Submit — auto-uploaded to Google Drive</span>
+    </div>
+  </div>
+</ion-content>

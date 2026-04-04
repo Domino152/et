@@ -1,0 +1,56 @@
+.date-item {
+  --padding-start: 12px;
+  --inner-padding-end: 12px;
+
+  ion-datetime {
+    max-width: 100%;
+    padding: 8px 0;
+  }
+}
+
+.field-error {
+  display: block;
+  padding: 4px 16px 10px;
+  font-size: 12px;
+}
+
+.payment-badge-row {
+  padding: 0 16px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  ion-chip {
+    margin: 0;
+    font-weight: 500;
+  }
+}
+
+.upload-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ion-color-medium);
+  text-align: center;
+  padding: 0 24px 32px;
+  margin: 0;
+
+  ion-icon {
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+}
+
+ion-textarea {
+  --padding-top: 12px;
+  --padding-bottom: 12px;
+}
+
+ion-card-content {
+  &.ion-no-padding ion-item {
+    --padding-start: 12px;
+    --inner-padding-end: 12px;
+  }
+}

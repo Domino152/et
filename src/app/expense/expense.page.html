@@ -1,0 +1,68 @@
+<ion-header class="ion-no-border">
+  <ion-toolbar color="primary">
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/home" text=""></ion-back-button>
+    </ion-buttons>
+    <ion-title>New Expense</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+
+<ion-content>
+
+  <form [formGroup]="form" (ngSubmit)="submit()">
+
+    <div class="section-label">Receipt Photo</div>
+    <div style="margin: 0 16px 16px;">
+      <div *ngIf="capturedImage; else noImage">
+        <img [src]="capturedImage.dataUrl" alt="Captured receipt" class="preview-image" style="margin-top:0;" />
+        <ion-button expand="block" fill="outline" color="danger" (click)="removeImage()" style="margin-top: 8px; --border-radius: 8px;">
+          <ion-icon slot="start" name="trash-outline"></ion-icon>
+          Retake Photo
+        </ion-button>
+      </div>
+
+      <ng-template #noImage>
+        <div class="image-placeholder" (click)="takePicture()" style="margin-top:0;">
+          <ion-icon name="camera-outline"></ion-icon>
+          <p>Tap to scan receipt...</p>
+        </div>
+      </ng-template>
+    </div>
+
+    <div class="section-label">Expense Details</div>
+    <ion-list inset="true" style="margin: 0 16px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border-radius: 12px; border: 1px solid rgba(0,0,0,0.05);">
+      
+      <ion-item lines="full">
+        <ion-icon slot="start" name="calendar-outline" color="primary"></ion-icon>
+        <ion-label style="font-size: 15px; font-weight: 500;">Date</ion-label>
+        <ion-datetime-button datetime="expense-datetime"></ion-datetime-button>
+        <ion-modal [keepContentsMounted]="true">
+          <ng-template>
+            <ion-datetime id="expense-datetime" formControlName="date" presentation="date" [max]="maxDate" [min]="minDate" color="primary"></ion-datetime>
+          </ng-template>
+        </ion-modal>
+      </ion-item>
+      
+      <ion-item lines="none">
+        <ion-icon slot="start" name="document-text-outline" color="primary"></ion-icon>
+        <ion-textarea formControlName="description" placeholder="Description of expense..." rows="3" [counter]="true" maxlength="500" auto-grow="true"></ion-textarea>
+      </ion-item>
+    </ion-list>
+
+    <ion-note *ngIf="descriptionCtrl.invalid && descriptionCtrl.touched" color="danger" style="display: block; text-align: center; margin-bottom: 12px;">Description required.</ion-note>
+
+    <ion-button type="submit" expand="block" color="primary" class="submit-btn" [disabled]="isSubmitting">
+      <ion-icon slot="start" [name]="isAuthenticated ? 'cloud-upload-outline' : 'log-in-outline'"></ion-icon>
+      <span *ngIf="!isAuthenticated">Sign in &amp; Submit</span>
+      <span *ngIf="isAuthenticated">{{ isSubmitting ? 'Uploading…' : 'Submit Expense' }}</span>
+    </ion-button>
+
+    <p style="text-align: center; color: var(--ion-color-medium); font-size: 13px; margin: 16px; opacity: 0.8;">
+      <ion-icon name="cloud-done-outline"></ion-icon> Securely uploads to Google Drive.
+    </p>
+
+  </form>
+
+</ion-content>
