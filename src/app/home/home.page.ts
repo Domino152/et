@@ -1,85 +1,144 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import { AlertController, LoadingController } from '@ionic/angular';
+import { Subscription } from 'rxjs';
 import { AuthService } from '../services/auth.service';
-import { DriveService, HistoryItem } from '../services/drive.service';
+import { BackendService, ReceiptRecord } from '../services/backend.service';
+import { SyncQueueService } from '../services/sync-queue.service';
 
 @Component({
   selector: 'app-home',
   templateUrl: './home.page.html',
   styleUrls: ['./home.page.scss'],
 })
-export class HomePage implements OnInit {
+export class HomePage implements OnInit, OnDestroy {
   isAuthenticated = false;
+  isAuthReady = false;
   userEmail = '';
   isSigningIn = false;
-
-  historyItems: HistoryItem[] = [];
+  
+  allItems: ReceiptRecord[] = [];
+  filteredItems: ReceiptRecord[] = [];
   isLoadingHistory = false;
+  pendingCount = 0;
+  failedCount = 0;
+
+  selectedCategory: '' | 'Expense' | 'Purchase' = '';
+  searchQuery = '';
+
+  private authSub?: Subscription;
+  private syncSub?: Subscription;
 
   constructor(
     private authService: AuthService,
-    private driveService: DriveService,
+    private backendService: BackendService,
+    private syncQueueService: SyncQueueService,
     private router: Router,
     private alertCtrl: AlertController,
     private loadingCtrl: LoadingController
   ) {}
 
-  async ngOnInit() {
+  async ngOnInit(): Promise<void> {
+    this.authSub = this.authService.user$.subscribe(user => {
+      this.isAuthenticated = !!user;
+      this.userEmail = user?.email ?? '';
+      this.isAuthReady = true;
+
+      if (this.isAuthenticated) {
+        this.loadHistory();
+      } else {
+        this.allItems = [];
+        this.filteredItems = [];
+      }
+    });
+
     await this.authService.initialize().catch(() => {});
-    this.checkAuth();
+
+    // Refresh when items are uploaded successfully
+    this.syncSub = this.syncQueueService.syncCompleted.subscribe(() => {
+      if (this.isAuthenticated) this.loadHistory();
+    });
   }
 
-  ionViewWillEnter() {
-    if (this.isAuthenticated) {
-      this.loadHistory();
-    }
+  ngOnDestroy(): void {
+    this.authSub?.unsubscribe();
+    this.syncSub?.unsubscribe();
   }
 
-  private checkAuth() {
-    const user = this.authService.getUser();
-    if (user) {
-      this.isAuthenticated = true;
-      this.userEmail = user.email;
-      // Small delay ensures token is ready for API calls
-      setTimeout(() => this.loadHistory(), 300);
-    } else {
-      this.isAuthenticated = false;
-      this.userEmail = '';
-      this.historyItems = [];
-    }
+  ionViewWillEnter(): void {
+    this.updateQueueCounts();
+    if (this.isAuthenticated) this.loadHistory();
   }
 
-  async loadHistory() {
-    if (!this.isAuthenticated || this.isLoadingHistory) return;
-    
+  async updateQueueCounts(): Promise<void> {
+    this.pendingCount = await this.syncQueueService.getPendingCount();
+    this.failedCount = await this.syncQueueService.getFailedCount();
+  }
+
+  async loadHistory(force: boolean = false): Promise<void> {
+    if (!this.isAuthenticated) return;
+    if (!force && this.isLoadingHistory) return;
+
     this.isLoadingHistory = true;
     try {
-      const items = await this.driveService.getRecentFiles(4);
-      console.log('History items loaded:', items.length);
-      this.historyItems = items;
-    } catch (err) {
+      this.updateQueueCounts();
+      this.allItems = await this.backendService.getReceipts(this.userEmail);
+      this.applyFilters();
+    } catch (err: any) {
       console.error('Failed to load history:', err);
-      this.historyItems = [];
+      // Optional: alert only if forced or specific error
+      if (force) {
+        const alert = await this.alertCtrl.create({
+          header: 'Connection Error',
+          message: `Could not reach the server at 10.53.26.1. Please ensure your laptop is running the backend and both devices are on the same WiFi.`,
+          buttons: ['OK']
+        });
+        await alert.present();
+      }
     } finally {
       this.isLoadingHistory = false;
     }
+
   }
 
-  openDriveLink(url: string | undefined) {
-    if (url) {
-      window.open(url, '_blank');
+  onCategoryFilter(cat: '' | 'Expense' | 'Purchase'): void {
+    this.selectedCategory = cat;
+    this.applyFilters();
+  }
+
+  onSearchChange(event: any): void {
+    this.searchQuery = (event.target.value || '').toLowerCase().trim();
+    this.applyFilters();
+  }
+
+  private applyFilters(): void {
+    let items = [...this.allItems];
+
+    if (this.selectedCategory) {
+      items = items.filter(i => i.category === this.selectedCategory);
     }
+
+    if (this.searchQuery) {
+      items = items.filter(i => 
+        i.name.toLowerCase().includes(this.searchQuery) ||
+        i.description?.toLowerCase().includes(this.searchQuery)
+      );
+    }
+
+    this.filteredItems = items;
   }
 
+  async retryFailed(): Promise<void> {
+    await this.syncQueueService.retryFailed();
+    this.updateQueueCounts();
+  }
 
-  async signIn() {
+  async signIn(): Promise<void> {
     this.isSigningIn = true;
     const loading = await this.loadingCtrl.create({ message: 'Signing in...' });
     await loading.present();
     try {
       await this.authService.signIn();
-      this.checkAuth();
     } catch (err: any) {
       const msg = err?.message || 'Sign-in failed.';
       if (!msg.includes('cancelled') && !msg.includes('cancel')) {
@@ -96,12 +155,15 @@ export class HomePage implements OnInit {
     }
   }
 
-  async signOut() {
+  async signOut(): Promise<void> {
     await this.authService.signOut();
-    this.checkAuth();
   }
 
-  navigateTo(page: string) {
+  navigateTo(page: string): void {
     this.router.navigate([`/${page}`]);
+  }
+
+  openDriveLink(url: string | undefined): void {
+    if (url) window.open(url, '_system');
   }
 }

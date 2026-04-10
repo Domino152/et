@@ -8,78 +8,117 @@
 </ion-header>
 
 <ion-content>
-
-<ion-content>
-
   <form [formGroup]="form" (ngSubmit)="submit()">
 
-    <div class="section-label">Receipt Photo</div>
-    <div style="margin: 0 16px 16px;">
+    <!-- Receipt Photo -->
+    <div class="section-label">Receipt Photo <span class="required">*</span></div>
+    <div style="margin: 0 20px 16px;">
       <div *ngIf="capturedImage; else noImage">
-        <img [src]="capturedImage.dataUrl" alt="Captured receipt" class="preview-image" style="margin-top:0;" />
-        <ion-button expand="block" fill="outline" color="danger" (click)="removeImage()" style="margin-top: 8px; --border-radius: 8px;">
-          <ion-icon slot="start" name="trash-outline"></ion-icon>
-          Retake Photo
-        </ion-button>
+        <img [src]="capturedImage.dataUrl" alt="Captured receipt" class="preview-image" />
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <ion-button expand="block" fill="outline" color="secondary" (click)="showImageOptions()" style="flex:1; --border-radius:12px;">
+            <ion-icon slot="start" name="camera-outline"></ion-icon>
+            Retake
+          </ion-button>
+          <ion-button expand="block" fill="outline" color="danger" (click)="removeImage()" style="flex:1; --border-radius:12px;">
+            <ion-icon slot="start" name="trash-outline"></ion-icon>
+            Remove
+          </ion-button>
+        </div>
       </div>
-
       <ng-template #noImage>
-        <div class="image-placeholder" (click)="takePicture()" style="margin-top:0;">
+        <div class="image-placeholder" (click)="showImageOptions()">
           <ion-icon name="camera-outline"></ion-icon>
-          <p>Tap to scan receipt...</p>
+          <p>Tap to attach receipt</p>
+          <span class="image-hint">Camera or Gallery</span>
         </div>
       </ng-template>
     </div>
 
+    <!-- Purchase Details -->
     <div class="section-label">Purchase Details</div>
-    <ion-list inset="true" style="margin: 0 16px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border-radius: 12px; border: 1px solid rgba(0,0,0,0.05);">
-      
+    <div class="form-card" style="margin: 0 20px 8px;">
+
+      <!-- Name -->
+      <ion-item lines="full">
+        <ion-icon slot="start" name="pricetag-outline" color="secondary"></ion-icon>
+        <ion-input formControlName="name" placeholder="Receipt Name (e.g. Office Supplies)" clearInput="true" type="text"></ion-input>
+      </ion-item>
+      <ion-note *ngIf="nameCtrl.invalid && nameCtrl.touched" color="danger" class="field-error">
+        Name is required (min 2 characters).
+      </ion-note>
+
       <!-- Date -->
       <ion-item lines="full">
         <ion-icon slot="start" name="calendar-outline" color="secondary"></ion-icon>
-        <ion-label style="font-size: 15px; font-weight: 500;">Date</ion-label>
+        <ion-label style="font-size:15px; font-weight:500;">Date</ion-label>
         <ion-datetime-button datetime="purchase-datetime"></ion-datetime-button>
         <ion-modal [keepContentsMounted]="true">
           <ng-template>
-            <ion-datetime id="purchase-datetime" formControlName="date" presentation="date" [max]="maxDate" [min]="minDate" color="secondary"></ion-datetime>
+            <ion-datetime id="purchase-datetime" formControlName="date" presentation="date" [max]="maxDate" color="secondary"></ion-datetime>
           </ng-template>
         </ion-modal>
       </ion-item>
-      
-      <!-- Payment Type -->
+
+      <!-- Paid By -->
       <ion-item lines="full">
         <ion-icon slot="start" name="card-outline" color="secondary"></ion-icon>
-        <ion-select formControlName="paymentType" placeholder="Payment Method" interface="action-sheet">
-          <ion-select-option *ngFor="let option of paymentOptions" [value]="option.value">{{ option.label }}</ion-select-option>
+        <ion-select formControlName="paidBy" placeholder="Paid By" interface="action-sheet">
+          <ion-select-option *ngFor="let opt of paidByOptions" [value]="opt.value">
+            {{ opt.label }}
+          </ion-select-option>
         </ion-select>
       </ion-item>
+      <ion-note *ngIf="paidByCtrl.invalid && paidByCtrl.touched" color="danger" class="field-error">
+        Please select who paid.
+      </ion-note>
 
-      <div *ngIf="paymentTypeCtrl.value" style="padding: 12px 16px; background: rgba(0,0,0,0.02); text-align: center; border-bottom: 1px solid rgba(0,0,0,0.05);">
-        <ion-chip [color]="paymentTypeCtrl.value === 'self' ? 'tertiary' : 'secondary'" outline="false" style="margin:0;">
-          <ion-icon [name]="paymentTypeCtrl.value === 'self' ? 'person-outline' : 'business-outline'"></ion-icon>
-          <ion-label>{{ getSelectedPaymentLabel() }}</ion-label>
+      <!-- Selected paid-by chip -->
+      <div *ngIf="paidByCtrl.value" style="padding:12px 16px; background:rgba(0,0,0,0.02);">
+        <ion-chip [color]="paidByCtrl.value === 'Company' ? 'secondary' : 'tertiary'" outline="false" style="margin:0;">
+          <ion-icon [name]="paidByCtrl.value === 'Company' ? 'business-outline' : 'person-outline'"></ion-icon>
+          <ion-label>{{ paidByCtrl.value }}</ion-label>
         </ion-chip>
       </div>
 
-      <!-- Description -->
+      <!-- Description (optional) -->
       <ion-item lines="none">
         <ion-icon slot="start" name="document-text-outline" color="secondary"></ion-icon>
-        <ion-textarea formControlName="description" placeholder="Description of purchase..." rows="3" [counter]="true" maxlength="500" auto-grow="true"></ion-textarea>
+        <ion-textarea
+          formControlName="description"
+          placeholder="Description (optional)"
+          rows="3"
+          [counter]="true"
+          maxlength="500"
+          auto-grow="true">
+        </ion-textarea>
       </ion-item>
-    </ion-list>
-    
-    <ion-note *ngIf="form.invalid && form.touched" color="danger" style="display: block; text-align: center; margin-bottom: 12px;">Please fill in all required fields.</ion-note>
+    </div>
+
+    <!-- Category badge -->
+    <div style="text-align:center; margin: 8px 20px 24px;">
+      <ion-chip color="secondary" outline="false">
+        <ion-icon name="cart-outline"></ion-icon>
+        <ion-label>Category: Purchase</ion-label>
+      </ion-chip>
+    </div>
 
     <!-- Submit -->
-    <ion-button type="submit" expand="block" color="secondary" class="submit-btn" [disabled]="isSubmitting">
+    <ion-button
+      type="submit"
+      expand="block"
+      color="secondary"
+      class="submit-btn"
+      [disabled]="isSubmitting">
       <ion-icon slot="start" [name]="isAuthenticated ? 'cloud-upload-outline' : 'log-in-outline'"></ion-icon>
       <span *ngIf="!isAuthenticated">Sign in &amp; Submit</span>
-      <span *ngIf="isAuthenticated">{{ isSubmitting ? 'Uploading…' : 'Submit Purchase' }}</span>
+      <span *ngIf="isAuthenticated">{{ isSubmitting ? 'Processing…' : 'Submit Purchase' }}</span>
     </ion-button>
-    <p style="text-align: center; color: var(--ion-color-medium); font-size: 13px; margin: 16px; opacity: 0.8;">
-      <ion-icon name="cloud-done-outline"></ion-icon> Securely uploads to Google Drive.
+
+    <p class="upload-note">
+      <ion-icon name="shield-checkmark-outline"></ion-icon>
+      Receipts are saved to your Google Drive securely.
     </p>
 
   </form>
-
 </ion-content>

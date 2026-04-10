@@ -17,5 +17,8 @@ export const environment = {
 
   // Google Drive API base URL
   driveApiUrl: 'https://www.googleapis.com/drive/v3',
-  driveUploadUrl: 'https://www.googleapis.com/upload/drive/v3'
+  driveUploadUrl: 'https://www.googleapis.com/upload/drive/v3',
+  backendUrl: 'http://10.53.26.1:3000/api'
+
 };
+

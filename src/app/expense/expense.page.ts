@@ -1,15 +1,19 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import {
   LoadingController,
   ToastController,
-  AlertController
+  AlertController,
+  ActionSheetController
 } from '@ionic/angular';
 
 import { CameraService, CapturedImage } from '../services/camera.service';
 import { DriveService } from '../services/drive.service';
-import { AuthService } from '../services/auth.service';
+import { AuthService } from './../services/auth.service';
+import { SyncQueueService } from '../services/sync-queue.service';
+import { BackendService } from '../services/backend.service';
+
 
 @Component({
   selector: 'app-expense',
@@ -20,11 +24,9 @@ export class ExpensePage implements OnInit {
   form!: FormGroup;
   capturedImage: CapturedImage | null = null;
   isSubmitting = false;
-  maxDate = new Date().toISOString();
-  minDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
-  
   isAuthenticated = false;
   userEmail = '';
+  maxDate = new Date().toISOString();
 
   constructor(
     private fb: FormBuilder,
@@ -32,15 +34,20 @@ export class ExpensePage implements OnInit {
     private cameraService: CameraService,
     private driveService: DriveService,
     private authService: AuthService,
+    private syncQueueService: SyncQueueService,
+    private backendService: BackendService,
     private loadingCtrl: LoadingController,
+
     private toastCtrl: ToastController,
-    private alertCtrl: AlertController
+    private alertCtrl: AlertController,
+    private actionSheetCtrl: ActionSheetController
   ) {}
 
-  async ngOnInit(): Promise<void> {
+  ngOnInit(): void {
     this.form = this.fb.group({
+      name:        ['', [Validators.required, Validators.minLength(2), Validators.maxLength(50)]],
       date:        [new Date().toISOString(), Validators.required],
-      description: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(500)]]
+      description: ['', [Validators.maxLength(500)]] // optional
     });
     this.checkAuth();
   }
@@ -51,13 +58,8 @@ export class ExpensePage implements OnInit {
 
   private checkAuth(): void {
     const user = this.authService.getUser();
-    if (user) {
-      this.isAuthenticated = true;
-      this.userEmail = user.email;
-    } else {
-      this.isAuthenticated = false;
-      this.userEmail = '';
-    }
+    this.isAuthenticated = !!user;
+    this.userEmail = user?.email ?? '';
   }
 
   async signIn(): Promise<void> {
@@ -76,7 +78,32 @@ export class ExpensePage implements OnInit {
     }
   }
 
-  // ─── Camera ────────────────────────────────────────────────────────────────
+  // ─── Camera / Gallery ────────────────────────────────────────────────────────
+
+  async showImageOptions(): Promise<void> {
+    const actionSheet = await this.actionSheetCtrl.create({
+      header: 'Select Receipt Image',
+      cssClass: 'costtrack-action-sheet',
+      buttons: [
+        {
+          text: 'Take Photo',
+          icon: 'camera-outline',
+          handler: () => this.takePicture()
+        },
+        {
+          text: 'Choose from Gallery',
+          icon: 'image-outline',
+          handler: () => this.selectFromGallery()
+        },
+        {
+          text: 'Cancel',
+          icon: 'close-outline',
+          role: 'cancel'
+        }
+      ]
+    });
+    await actionSheet.present();
+  }
 
   async takePicture(): Promise<void> {
     try {
@@ -91,11 +118,20 @@ export class ExpensePage implements OnInit {
     }
   }
 
+  async selectFromGallery(): Promise<void> {
+    try {
+      this.capturedImage = await this.cameraService.selectFromGallery();
+    } catch (err: any) {
+      if (err?.message === 'CANCELLED') return;
+      await this.showToast(err?.message ?? 'Could not select image.', 'danger');
+    }
+  }
+
   removeImage(): void {
     this.capturedImage = null;
   }
 
-  // ─── Submit ────────────────────────────────────────────────────────────────
+  // ─── Submit ──────────────────────────────────────────────────────────────────
 
   async submit(): Promise<void> {
     if (this.form.invalid) {
@@ -105,58 +141,114 @@ export class ExpensePage implements OnInit {
     }
 
     if (!this.capturedImage) {
-      await this.showToast('Please capture a receipt photo.', 'warning');
+      await this.showToast('Please attach a receipt photo.', 'warning');
       return;
     }
 
-    // Ensure user is authenticated
-    try {
-      await this.authService.getAccessToken();
-      this.checkAuth();
-    } catch (err: any) {
-      await this.showToast(err?.message || 'Please sign in with Google first.', 'danger');
-      return;
+    // Ensure signed in
+    if (!this.isAuthenticated) {
+      try {
+        await this.authService.signIn();
+        this.checkAuth();
+      } catch (err: any) {
+        await this.showToast('Please sign in with Google first.', 'danger');
+        return;
+      }
     }
+
+    // Auto-format name
+    const rawName = this.form.value.name.trim();
 
     this.isSubmitting = true;
     const loading = await this.loadingCtrl.create({
-      message: 'Uploading to Google Drive…',
+      message: '🚀 Uploading to Google Drive...',
       spinner: 'crescent'
     });
     await loading.present();
 
     try {
-      const result = await this.driveService.uploadFile({
-        base64Image: this.capturedImage.base64Data,
-        mimeType:    this.capturedImage.mimeType,
-        description: this.form.value.description.trim(),
-        date:        this.form.value.date,
-        folderName:  'Expense'
-      });
+      const user = this.authService.getUser()!;
+      const itemId = `exp_${Date.now()}`;
 
-      await loading.dismiss();
-      await this.showSuccessAlert(result.fileName, result.folderName);
-      this.resetForm();
+      // 1. ATTEMPT INSTANT UPLOAD
+      try {
+        console.log('[Expense] Attempting instant-first upload...');
+        const driveRes = await this.driveService.uploadFile({
+          base64Image: this.capturedImage.base64Data,
+          mimeType: this.capturedImage.mimeType,
+          description: this.form.value.description?.trim() ?? '',
+          date: this.form.value.date,
+          folderName: 'Expense',
+          userName: rawName
+        });
+
+        const meta: any = {
+          userId: user.email,
+          name: rawName,
+          description: this.form.value.description?.trim() ?? '',
+          category: 'Expense',
+          date: this.form.value.date,
+          imageUrl: driveRes.webViewLink
+        };
+
+        try {
+          await this.backendService.saveReceipt(meta);
+        } catch (dbErr: any) {
+          // Wrap error and include Drive URL for the queue
+          throw { ...dbErr, _driveUrl: driveRes.webViewLink, message: dbErr.message };
+        }
+
+        
+        await loading.dismiss();
+        await this.showSuccessAlert(rawName, true);
+        this.resetForm();
+
+      } catch (instantErr: any) {
+        console.warn('[Expense] Instant upload failed, falling back to background queue:', instantErr);
+        
+        // If Drive succeeded but DB failed, we have a URL!
+        const existingDriveUrl = (instantErr as any)._driveUrl || '';
+
+        // 2. FALLBACK TO BACKGROUND QUEUE
+        await this.syncQueueService.enqueue({
+          id: itemId,
+          drivePayload: {
+            base64Image: this.capturedImage.base64Data,
+            mimeType: this.capturedImage.mimeType,
+            description: this.form.value.description?.trim() ?? '',
+            date: this.form.value.date,
+            folderName: 'Expense',
+            userName: rawName
+          },
+          metaPayload: {
+            userId: user.email,
+            name: rawName,
+            description: this.form.value.description?.trim() ?? '',
+            category: 'Expense',
+            imageUrl: existingDriveUrl, 
+            date: this.form.value.date
+          }
+        });
+
+
+        await loading.dismiss();
+        await this.showSuccessAlert(rawName, false);
+        this.resetForm();
+      }
 
     } catch (err: any) {
       await loading.dismiss();
-      await this.showToast(
-        `Upload failed: ${err?.message ?? 'Unknown error'}`,
-        'danger'
-      );
+      await this.showToast(`Error: ${err?.message ?? 'Unknown error'}`, 'danger');
     } finally {
       this.isSubmitting = false;
     }
   }
 
-  // ─── Helpers ───────────────────────────────────────────────────────────────
 
-  goBack(): void {
-    this.router.navigate(['/home']);
-  }
+  // ─── Helpers ─────────────────────────────────────────────────────────────────
 
   private resetForm(): void {
-    this.form.reset({ date: new Date().toISOString(), description: '' });
+    this.form.reset({ name: '', date: new Date().toISOString(), description: '' });
     this.capturedImage = null;
   }
 
@@ -170,10 +262,12 @@ export class ExpensePage implements OnInit {
     await toast.present();
   }
 
-  private async showSuccessAlert(fileName: string, folder: string): Promise<void> {
+  private async showSuccessAlert(name: string, isInstant: boolean): Promise<void> {
     const alert = await this.alertCtrl.create({
-      header: 'Upload Successful!',
-      message: `"${fileName}" has been saved to the <b>${folder}</b> folder on Google Drive.`,
+      header: isInstant ? '✅ Receipt Saved!' : '🕒 Receipt Queued',
+      message: isInstant 
+        ? `<b>${name}</b> has been securely stored in Google Drive and your history.`
+        : `<b>${name}</b> has been saved locally. It will sync to Google Drive when your connection improves.`,
       buttons: [
         { text: 'Add Another', role: 'cancel' },
         { text: 'Go Home', handler: () => this.router.navigate(['/home']) }
@@ -181,6 +275,7 @@ export class ExpensePage implements OnInit {
     });
     await alert.present();
   }
+
 
   private async showPermissionAlert(): Promise<void> {
     const alert = await this.alertCtrl.create({
@@ -191,8 +286,7 @@ export class ExpensePage implements OnInit {
     await alert.present();
   }
 
-  // ─── Template helpers ──────────────────────────────────────────────────────
-
-  get dateCtrl()        { return this.form.get('date')!; }
+  get nameCtrl() { return this.form.get('name')!; }
+  get dateCtrl() { return this.form.get('date')!; }
   get descriptionCtrl() { return this.form.get('description')!; }
 }

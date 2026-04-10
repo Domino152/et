@@ -1,15 +1,28 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.expensetracker.app',
-  appName: 'Expense Tracker',
+  appId: 'com.costtrack.app',
+  appName: 'CostTrack',
   webDir: 'www',
   server: {
-    androidScheme: 'https'
+    androidScheme: 'https',
+    cleartext: true
   },
+
   plugins: {
     Camera: {
       saveToGallery: false
+    },
+    SplashScreen: {
+      launchShowDuration: 2000,
+      launchAutoHide: false,
+      backgroundColor: '#d4af37',
+      androidSplashResourceName: 'splash',
+      showSpinner: false
+    },
+    LocalNotifications: {
+      smallIcon: 'ic_stat_icon_config_sample',
+      iconColor: '#4f46e5'
     },
     GoogleAuth: {
       scopes: [
